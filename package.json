@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/erlandsen-tech/bubble_bobble_webgl#readme",
   "dependencies": {
+    "canvas": "^3.2.3",
     "playcanvas": "^2.18.0"
   }
 }

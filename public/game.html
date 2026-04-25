@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bubble Bobble - Retro Edition</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 16px;
+            z-index: 10;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .ui-line {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+    <div id="ui">
+        <div class="ui-line">SCORE: <span id="score">0</span></div>
+        <div class="ui-line">LIVES: <span id="lives">3</span></div>
+        <div class="ui-line">LEVEL: <span id="level">1</span></div>
+    </div>
+
+    <script>
+        // Game constants
+        const TILE_SIZE = 16;
+        const TILES_X = 20;
+        const TILES_Y = 14;
+
+        // Tile IDs
+        const TILES = {
+            EMPTY: 0,
+            GRASS: 1,
+            STONE: 2,
+            WOOD: 3,
+            ICE: 4,
+            SPIKE: 5,
+            VOID: 6,
+            GOAL: 7
+        };
+
+        const SOLID_TILES = [TILES.GRASS, TILES.STONE, TILES.WOOD, TILES.ICE];
+
+        // Level data (0 = empty, > 0 = tile ID)
+        const levelMaps = [
+            // Level 1
+            [
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,1,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,2,2,2,2,0,0,0,0,0,0,2,2,2,2,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+            ],
+            // Level 2
+            [
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,3,3,3,0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,3,3,3,3,0,0,0,0,0,3,3,3,3,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,3,0,0,0,3,0,0,0,0,0,3,0,0,0,3,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,0,3,3,3,3,3,3,3,3,3,3,3,3,0,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,3,3,0,0,0,0,0,0,0,0,0,0,3,3,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,3,3,3,3,3,3,3,3,3,3,3,3,3,3,0,0,0,0,
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0,0,0,0,
+            ]
+        ];
+
+        // Game state
+        const gameState = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            gameActive: true,
+            currentMap: levelMaps[0],
+            spriteFrame: 0,
+            frameCounter: 0
+        };
+
+        // Entity classes
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.onGround = false;
+                this.width = 14;
+                this.height = 14;
+                this.frameIndex = 0;
+                this.direction = 1; // 1 = right, -1 = left
+            }
+
+            update(input, tiles) {
+                const gravity = 0.4;
+                const friction = 0.92;
+                const moveSpeed = 2;
+
+                // Input
+                if (input.left) this.velocityX = -moveSpeed;
+                else if (input.right) this.velocityX = moveSpeed;
+                else this.velocityX *= friction;
+
+                if (input.jump && this.onGround) {
+                    this.velocityY = -7;
+                    this.onGround = false;
+                }
+
+                // Physics
+                this.velocityY += gravity;
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+
+                // Collision
+                this.onGround = false;
+                for (let ty = Math.floor(this.y / TILE_SIZE); ty < Math.floor((this.y + this.height) / TILE_SIZE) + 1; ty++) {
+                    for (let tx = Math.floor(this.x / TILE_SIZE); tx < Math.floor((this.x + this.width) / TILE_SIZE) + 1; tx++) {
+                        if (ty >= 0 && ty < TILES_Y && tx >= 0 && tx < TILES_X) {
+                            const tile = tiles[ty * TILES_X + tx];
+                            if (SOLID_TILES.includes(tile)) {
+                                const tileX = tx * TILE_SIZE;
+                                const tileY = ty * TILE_SIZE;
+
+                                if (this.velocityY > 0 && this.y + this.height > tileY && this.y < tileY) {
+                                    this.y = tileY - this.height;
+                                    this.velocityY = 0;
+                                    this.onGround = true;
+                                } else if (this.velocityY < 0 && this.y < tileY + TILE_SIZE) {
+                                    this.y = tileY + TILE_SIZE;
+                                    this.velocityY = 0;
+                                } else if (this.velocityX > 0) {
+                                    this.x = tileX - this.width;
+                                } else if (this.velocityX < 0) {
+                                    this.x = tileX + TILE_SIZE;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Wrap around
+                if (this.x < -16) this.x = TILES_X * TILE_SIZE;
+                if (this.x > TILES_X * TILE_SIZE) this.x = -16;
+
+                // Death
+                if (this.y > TILES_Y * TILE_SIZE) {
+                    gameState.lives--;
+                    return false;
+                }
+                return true;
+            }
+
+            draw(ctx, playerImg) {
+                const frameX = (this.frameIndex % 4) * 64;
+                ctx.drawImage(playerImg, frameX, 0, 64, 64, this.x - 8, this.y - 8, 16, 16);
+            }
+        }
+
+        class Enemy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.velocityX = Math.random() > 0.5 ? 1 : -1;
+                this.velocityY = 0;
+                this.onGround = false;
+                this.width = 14;
+                this.height = 14;
+                this.frameIndex = 0;
+            }
+
+            update(tiles) {
+                const gravity = 0.4;
+
+                this.velocityY += gravity;
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+
+                // Collision
+                this.onGround = false;
+                let hitWall = false;
+                for (let ty = Math.floor(this.y / TILE_SIZE); ty < Math.floor((this.y + this.height) / TILE_SIZE) + 1; ty++) {
+                    for (let tx = Math.floor(this.x / TILE_SIZE); tx < Math.floor((this.x + this.width) / TILE_SIZE) + 1; tx++) {
+                        if (ty >= 0 && ty < TILES_Y && tx >= 0 && tx < TILES_X) {
+                            const tile = tiles[ty * TILES_X + tx];
+                            if (SOLID_TILES.includes(tile)) {
+                                const tileX = tx * TILE_SIZE;
+                                const tileY = ty * TILE_SIZE;
+
+                                if (this.velocityY > 0 && this.y + this.height > tileY) {
+                                    this.y = tileY - this.height;
+                                    this.velocityY = 0;
+                                    this.onGround = true;
+                                } else {
+                                    hitWall = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (hitWall || this.x < 0 || this.x > TILES_X * TILE_SIZE) {
+                    this.velocityX *= -1;
+                }
+
+                if (this.onGround && Math.random() < 0.02) {
+                    this.velocityY = -6;
+                }
+            }
+
+            draw(ctx, enemyImg) {
+                const frameX = (this.frameIndex % 4) * 64;
+                ctx.drawImage(enemyImg, frameX, 0, 64, 64, this.x - 8, this.y - 8, 16, 16);
+            }
+        }
+
+        // Main game loop
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = TILES_X * TILE_SIZE;
+        canvas.height = TILES_Y * TILE_SIZE;
+
+        // Load assets
+        const playerImg = new Image();
+        playerImg.src = 'assets/player_walk.png';
+
+        const enemyImg = new Image();
+        enemyImg.src = 'assets/enemy_walk.png';
+
+        const tilesetImg = new Image();
+        tilesetImg.src = 'assets/tileset.png';
+
+        // Entities
+        let player = new Player(10 * TILE_SIZE, 10 * TILE_SIZE);
+        let enemies = [
+            new Enemy(5 * TILE_SIZE, 6 * TILE_SIZE),
+            new Enemy(14 * TILE_SIZE, 6 * TILE_SIZE)
+        ];
+
+        // Input
+        const input = {
+            left: false,
+            right: false,
+            jump: false
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key.includes('Left') || e.key === 'a' || e.key === 'A') input.left = true;
+            if (e.key.includes('Right') || e.key === 'd' || e.key === 'D') input.right = true;
+            if (e.key.includes('Up') || e.key === 'w' || e.key === 'W' || e.key === ' ') input.jump = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key.includes('Left') || e.key === 'a' || e.key === 'A') input.left = false;
+            if (e.key.includes('Right') || e.key === 'd' || e.key === 'D') input.right = false;
+            if (e.key.includes('Up') || e.key === 'w' || e.key === 'W' || e.key === ' ') input.jump = false;
+        });
+
+        function gameLoop() {
+            if (!gameState.gameActive) {
+                ctx.fillStyle = '#FF0000';
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText('GAME OVER', TILES_X * TILE_SIZE / 2 - 80, TILES_Y * TILE_SIZE / 2);
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Update
+            if (!player.update(input, gameState.currentMap)) {
+                if (gameState.lives <= 0) {
+                    gameState.gameActive = false;
+                } else {
+                    player = new Player(10 * TILE_SIZE, 10 * TILE_SIZE);
+                }
+            }
+
+            enemies.forEach(enemy => {
+                enemy.update(gameState.currentMap);
+                enemy.frameIndex++;
+
+                // Collision with player
+                if (Math.abs(player.x - enemy.x) < 16 && Math.abs(player.y - enemy.y) < 16) {
+                    gameState.lives--;
+                    if (gameState.lives > 0) {
+                        player = new Player(10 * TILE_SIZE, 10 * TILE_SIZE);
+                    } else {
+                        gameState.gameActive = false;
+                    }
+                }
+            });
+
+            gameState.frameCounter++;
+            if (gameState.frameCounter % 8 === 0) {
+                player.frameIndex = (player.frameIndex + 1) % 4;
+            }
+
+            // Draw background
+            ctx.fillStyle = '#001020';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw tiles
+            for (let y = 0; y < TILES_Y; y++) {
+                for (let x = 0; x < TILES_X; x++) {
+                    const tile = gameState.currentMap[y * TILES_X + x];
+                    if (tile > 0) {
+                        const tileIndex = tile - 1;
+                        const srcX = tileIndex * TILE_SIZE;
+                        const srcY = 0;
+                        ctx.drawImage(tilesetImg, srcX, srcY, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    }
+                }
+            }
+
+            // Draw entities
+            player.draw(ctx, playerImg);
+            enemies.forEach(enemy => enemy.draw(ctx, enemyImg));
+
+            // Update UI
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('lives').textContent = gameState.lives;
+            document.getElementById('level').textContent = gameState.level;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game
+        setTimeout(() => {
+            gameLoop();
+        }, 500);
+    </script>
+</body>
+</html>
