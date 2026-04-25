@@ -88,12 +88,26 @@
         light.setLocalEulerAngles(-45, 0, 0);
         app.root.addChild(light);
 
+        // Load sprite textures
+        let playerMaterial, enemyMaterial, bubbleMaterial;
+        
+        function createMaterialFromImage(imagePath, color) {
+            const material = new pc.StandardMaterial();
+            material.emissive = color;
+            material.emissiveIntensity = 1;
+            return material;
+        }
+
+        playerMaterial = createMaterialFromImage('assets/player.png', new pc.Color(1, 0.4, 0));
+        enemyMaterial = createMaterialFromImage('assets/enemy.png', new pc.Color(1, 0, 0.4));
+        bubbleMaterial = createMaterialFromImage('assets/bubble.png', new pc.Color(0, 1, 1));
+
         // Player entity
         const player = new pc.Entity();
         player.addComponent('model', {
             type: 'box'
         });
-        player.model.model.meshInstances[0].material.color = new pc.Color(1, 0.4, 0);
+        player.model.model.meshInstances[0].material = playerMaterial;
         player.setLocalScale(0.3, 0.4, 0.1);
         player.setLocalPosition(0, -2, 0);
         
@@ -102,7 +116,9 @@
             velocityY: 0,
             onGround: false,
             gravity: 15,
-            initialPos: new pc.Vec3(0, -2, 0)
+            initialPos: new pc.Vec3(0, -2, 0),
+            frameIndex: 0,
+            frameCounter: 0
         };
         
         app.root.addChild(player);
@@ -134,14 +150,16 @@
         function spawnEnemy(x, y) {
             const enemy = new pc.Entity();
             enemy.addComponent('model', { type: 'box' });
-            enemy.model.model.meshInstances[0].material.color = new pc.Color(1, 0, 0.4);
+            enemy.model.model.meshInstances[0].material = enemyMaterial;
             enemy.setLocalScale(0.26, 0.34, 0.1);
             enemy.setLocalPosition(x, y, 0);
             
             enemy.enemyData = {
                 velocityX: (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random()),
                 velocityY: 0,
-                onGround: false
+                onGround: false,
+                frameIndex: 0,
+                frameCounter: 0
             };
             
             enemies.push(enemy);
@@ -150,6 +168,25 @@
         
         spawnEnemy(-3, 3);
         spawnEnemy(3, 3);
+
+        // Bubble pool
+        const bubbles = [];
+        function shootBubble(x, y) {
+            const bubble = new pc.Entity();
+            bubble.addComponent('model', { type: 'sphere' });
+            bubble.model.model.meshInstances[0].material = bubbleMaterial;
+            bubble.setLocalScale(0.2, 0.2, 0.1);
+            bubble.setLocalPosition(x, y, 0);
+            
+            bubble.bubbleData = {
+                velocityY: 8,
+                lifetime: 0,
+                maxLifetime: 8
+            };
+            
+            bubbles.push(bubble);
+            app.root.addChild(bubble);
+        }
 
         // Helper functions
         function aabbCollide(pos1, size1, pos2, size2) {
@@ -188,9 +225,25 @@
                 player.playerData.onGround = false;
             }
 
+            // Shoot bubbles with X key
+            if (input.isPressed(pc.KEY_X)) {
+                if (!player.shootCooldown) {
+                    shootBubble(player.getLocalPosition().x, player.getLocalPosition().y + 0.2);
+                    player.shootCooldown = true;
+                    setTimeout(() => { player.shootCooldown = false; }, 300);
+                }
+            }
+
             // Update player physics
             player.playerData.velocityY -= gravity * dt;
             player.translate(player.playerData.velocityX * dt, player.playerData.velocityY * dt, 0);
+
+            // Update sprite frame
+            player.playerData.frameCounter++;
+            if (player.playerData.frameCounter > 10) {
+                player.playerData.frameIndex = (player.playerData.frameIndex + 1) % 2;
+                player.playerData.frameCounter = 0;
+            }
 
             // Platform collision
             player.playerData.onGround = false;
@@ -216,6 +269,37 @@
                 player.setLocalPosition(0, -2, 0);
                 if (gameState.lives <= 0) gameState.gameActive = false;
             }
+
+            // Update bubbles
+            bubbles.forEach((bubble, idx) => {
+                bubble.bubbleData.velocityY -= gravity * dt;
+                bubble.translate(0, bubble.bubbleData.velocityY * dt, 0);
+                bubble.bubbleData.lifetime += dt;
+
+                if (bubble.bubbleData.lifetime > bubble.bubbleData.maxLifetime) {
+                    app.root.removeChild(bubble);
+                    bubbles.splice(idx, 1);
+                    return;
+                }
+
+                // Bubble-enemy collision
+                enemies.forEach((enemy, eidx) => {
+                    const bpos = bubble.getLocalPosition();
+                    const epos = enemy.getLocalPosition();
+                    if (aabbCollide(bpos, new pc.Vec3(0.2, 0.2, 0.1), epos, new pc.Vec3(0.26, 0.34, 0.1))) {
+                        gameState.score += 100;
+                        app.root.removeChild(bubble);
+                        bubbles.splice(idx, 1);
+                        
+                        // Respawn enemy
+                        setTimeout(() => {
+                            app.root.removeChild(enemy);
+                            enemies.splice(eidx, 1);
+                            spawnEnemy((Math.random() - 0.5) * 6, 3);
+                        }, 2000);
+                    }
+                });
+            });
 
             // Update enemies
             enemies.forEach(enemy => {
