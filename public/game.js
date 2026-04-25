@@ -41,7 +41,7 @@ class Game {
     
     init() {
         // Create player
-        this.player = new Player(0, -window.innerHeight / 2 + 150);
+        this.player = new Player(0, -window.innerHeight / 4);
         this.scene.add(this.player.mesh);
         
         // Create platforms
@@ -76,7 +76,7 @@ class Game {
         this.enemies = [];
         for (let i = 0; i < count; i++) {
             const x = (Math.random() - 0.5) * 600;
-            const y = window.innerHeight / 2 - 50;
+            const y = window.innerHeight / 2 - 150;
             const enemy = new Enemy(x, y);
             this.enemies.push(enemy);
             this.scene.add(enemy.mesh);
@@ -172,7 +172,7 @@ class Game {
                             this.enemies.push(newEnemy);
                             this.scene.add(newEnemy.mesh);
                         }
-                    }, 4000);
+                    }, 2000);
                 }
             });
         });
