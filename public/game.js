@@ -25,8 +25,8 @@ class Game {
         
         // Physics & input
         this.keys = {};
-        this.gravity = 0.5;
-        this.friction = 0.95;
+        this.gravity = 0.6;
+        this.friction = 0.92;
         
         // Game objects
         this.player = null;
@@ -41,7 +41,7 @@ class Game {
     
     init() {
         // Create player
-        this.player = new Player(0, -window.innerHeight / 2 + 100);
+        this.player = new Player(0, -window.innerHeight / 2 + 150);
         this.scene.add(this.player.mesh);
         
         // Create platforms
@@ -57,11 +57,12 @@ class Game {
         this.platforms = [];
         
         const platformData = [
-            { x: 0, y: 0, width: 400, height: 20 },
-            { x: -150, y: 150, width: 300, height: 20 },
-            { x: 150, y: 150, width: 300, height: 20 },
-            { x: -150, y: 300, width: 300, height: 20 },
-            { x: 150, y: 300, width: 300, height: 20 },
+            { x: 0, y: 0, width: 500, height: 30 },
+            { x: -200, y: 150, width: 350, height: 25 },
+            { x: 200, y: 150, width: 350, height: 25 },
+            { x: -200, y: 300, width: 350, height: 25 },
+            { x: 200, y: 300, width: 350, height: 25 },
+            { x: 0, y: 450, width: 500, height: 30 },
         ];
         
         platformData.forEach(data => {
@@ -75,8 +76,8 @@ class Game {
         this.enemies = [];
         for (let i = 0; i < count; i++) {
             const x = (Math.random() - 0.5) * 600;
-            const y = window.innerHeight / 2 - 100;
-            const enemy = new Enemy(x, y, this.platforms);
+            const y = window.innerHeight / 2 - 50;
+            const enemy = new Enemy(x, y);
             this.enemies.push(enemy);
             this.scene.add(enemy.mesh);
         }
@@ -104,15 +105,15 @@ class Game {
     update() {
         // Player input
         if (this.keys['ArrowLeft'] || this.keys['a']) {
-            this.player.velocityX = -5;
+            this.player.velocityX = -6;
         } else if (this.keys['ArrowRight'] || this.keys['d']) {
-            this.player.velocityX = 5;
+            this.player.velocityX = 6;
         } else {
             this.player.velocityX *= this.friction;
         }
         
-        if ((this.keys['ArrowUp'] || this.keys['w']) && this.player.onGround) {
-            this.player.velocityY = 12;
+        if ((this.keys['ArrowUp'] || this.keys['w'] || this.keys[' ']) && this.player.onGround) {
+            this.player.velocityY = 15;
             this.player.onGround = false;
         }
         
@@ -121,7 +122,7 @@ class Game {
         
         // Update enemies
         this.enemies.forEach(enemy => {
-            enemy.update(this.gravity, this.platforms, this.player);
+            enemy.update(this.gravity, this.platforms);
         });
         
         // Update bubbles
@@ -144,6 +145,7 @@ class Game {
                 this.lives--;
                 if (this.lives <= 0) {
                     this.gameActive = false;
+                    document.getElementById('score').textContent += ' - GAME OVER';
                 } else {
                     this.player.reset();
                 }
@@ -155,16 +157,22 @@ class Game {
             this.enemies.forEach((enemy, idx) => {
                 if (bubble.collidesWith(enemy)) {
                     bubble.alive = false;
-                    enemy.trapped = true;
+                    this.scene.remove(bubble.mesh);
                     this.score += 100;
                     
-                    // Pop bubble after delay
+                    // Respawn enemy after 4 seconds
                     setTimeout(() => {
-                        const newEnemy = new Enemy(enemy.mesh.position.x, enemy.mesh.position.y, this.platforms);
-                        this.enemies.splice(idx, 1, newEnemy);
-                        this.scene.remove(enemy.mesh);
-                        this.scene.add(newEnemy.mesh);
-                    }, 3000);
+                        if (this.gameActive) {
+                            this.scene.remove(enemy.mesh);
+                            this.enemies.splice(idx, 1);
+                            const newEnemy = new Enemy(
+                                (Math.random() - 0.5) * 600,
+                                window.innerHeight / 2 - 50
+                            );
+                            this.enemies.push(newEnemy);
+                            this.scene.add(newEnemy.mesh);
+                        }
+                    }, 4000);
                 }
             });
         });
@@ -190,11 +198,13 @@ class Game {
 // Player class
 class Player {
     constructor(x, y) {
-        const geometry = new THREE.BoxGeometry(30, 40, 10);
+        const geometry = new THREE.BoxGeometry(28, 36, 10);
         const material = new THREE.MeshBasicMaterial({ color: 0xff6600 });
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.position.set(x, y, 0);
         
+        this.width = 28;
+        this.height = 36;
         this.velocityX = 0;
         this.velocityY = 0;
         this.onGround = false;
@@ -203,81 +213,163 @@ class Player {
     }
     
     update(gravity, platforms) {
+        // Apply gravity
         this.velocityY -= gravity;
         
+        // Update position
         this.mesh.position.x += this.velocityX;
         this.mesh.position.y += this.velocityY;
         
-        // Platform collision
+        // Check platform collisions (AABB)
         this.onGround = false;
         platforms.forEach(platform => {
-            if (this.collidesWith(platform) && this.velocityY <= 0) {
-                this.mesh.position.y = platform.mesh.position.y + platform.height / 2 + 20;
-                this.velocityY = 0;
-                this.onGround = true;
+            if (this.isCollidingWithPlatform(platform)) {
+                // Only land if falling down
+                if (this.velocityY <= 0) {
+                    this.mesh.position.y = platform.mesh.position.y + (platform.height / 2) + (this.height / 2);
+                    this.velocityY = 0;
+                    this.onGround = true;
+                }
+                // Bump head if jumping into platform
+                else if (this.velocityY > 0) {
+                    this.mesh.position.y = platform.mesh.position.y - (platform.height / 2) - (this.height / 2);
+                    this.velocityY = -this.velocityY * 0.3;
+                }
             }
         });
         
-        // Boundary
-        const margin = 200;
-        if (this.mesh.position.x < -margin) this.mesh.position.x = margin;
-        if (this.mesh.position.x > margin) this.mesh.position.x = -margin;
+        // Wrap around screen horizontally
+        if (this.mesh.position.x < -window.innerWidth / 2 - 50) {
+            this.mesh.position.x = window.innerWidth / 2 + 50;
+        }
+        if (this.mesh.position.x > window.innerWidth / 2 + 50) {
+            this.mesh.position.x = -window.innerWidth / 2 - 50;
+        }
+        
+        // Reset if fell off bottom
+        if (this.mesh.position.y < -window.innerHeight / 2 - 100) {
+            this.reset();
+        }
+    }
+    
+    isCollidingWithPlatform(platform) {
+        const dx = this.mesh.position.x - platform.mesh.position.x;
+        const dy = this.mesh.position.y - platform.mesh.position.y;
+        
+        const overlapX = Math.abs(dx) < ((this.width + platform.width) / 2);
+        const overlapY = Math.abs(dy) < ((this.height + platform.height) / 2);
+        
+        return overlapX && overlapY;
     }
     
     collidesWith(other) {
         const dx = Math.abs(this.mesh.position.x - other.mesh.position.x);
         const dy = Math.abs(this.mesh.position.y - other.mesh.position.y);
         
-        return dx < 35 && dy < 40;
+        const minDist = (this.width + other.width) / 2;
+        const minDistY = (this.height + other.height) / 2;
+        
+        return dx < minDist && dy < minDistY;
     }
     
     reset() {
         this.mesh.position.set(this.initialX, this.initialY, 0);
         this.velocityX = 0;
         this.velocityY = 0;
+        this.onGround = false;
     }
 }
 
 // Enemy class
 class Enemy {
-    constructor(x, y, platforms) {
-        const geometry = new THREE.BoxGeometry(25, 35, 10);
+    constructor(x, y) {
+        const geometry = new THREE.BoxGeometry(26, 34, 10);
         const material = new THREE.MeshBasicMaterial({ color: 0xff0066 });
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.position.set(x, y, 0);
         
-        this.velocityX = Math.random() > 0.5 ? 3 : -3;
+        this.width = 26;
+        this.height = 34;
+        this.velocityX = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 2);
         this.velocityY = 0;
         this.onGround = false;
-        this.trapped = false;
-        this.platforms = platforms;
     }
     
-    update(gravity, platforms, player) {
-        if (this.trapped) return;
-        
+    update(gravity, platforms) {
+        // Apply gravity
         this.velocityY -= gravity;
+        
+        // Horizontal movement
         this.mesh.position.x += this.velocityX;
         this.mesh.position.y += this.velocityY;
         
         // Platform collision
         this.onGround = false;
         platforms.forEach(platform => {
-            if (this.collidesWith(platform) && this.velocityY <= 0) {
-                this.mesh.position.y = platform.mesh.position.y + platform.height / 2 + 18;
-                this.velocityY = 0;
-                this.onGround = true;
+            if (this.isCollidingWithPlatform(platform)) {
+                if (this.velocityY <= 0) {
+                    this.mesh.position.y = platform.mesh.position.y + (platform.height / 2) + (this.height / 2);
+                    this.velocityY = 0;
+                    this.onGround = true;
+                }
             }
         });
         
-        // Simple AI - bounce at edges
-        if (Math.abs(this.mesh.position.x) > 250) {
+        // Bounce off walls
+        if (Math.abs(this.mesh.position.x) > window.innerWidth / 2 - 50) {
             this.velocityX *= -1;
         }
         
-        // Random jump
-        if (this.onGround && Math.random() < 0.02) {
-            this.velocityY = 8;
+        // Random jumps
+        if (this.onGround && Math.random() < 0.025) {
+            this.velocityY = 10 + Math.random() * 4;
+        }
+    }
+    
+    isCollidingWithPlatform(platform) {
+        const dx = this.mesh.position.x - platform.mesh.position.x;
+        const dy = this.mesh.position.y - platform.mesh.position.y;
+        
+        const overlapX = Math.abs(dx) < ((this.width + platform.width) / 2);
+        const overlapY = Math.abs(dy) < ((this.height + platform.height) / 2);
+        
+        return overlapX && overlapY;
+    }
+    
+    collidesWith(other) {
+        const dx = Math.abs(this.mesh.position.x - other.mesh.position.x);
+        const dy = Math.abs(this.mesh.position.y - other.mesh.position.y);
+        
+        const minDist = (this.width + other.width) / 2;
+        const minDistY = (this.height + other.height) / 2;
+        
+        return dx < minDist && dy < minDistY;
+    }
+}
+
+// Bubble class (for future shooting mechanic)
+class Bubble {
+    constructor(x, y) {
+        const geometry = new THREE.SphereGeometry(12, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: false });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.position.set(x, y, 0);
+        
+        this.width = 24;
+        this.height = 24;
+        this.velocityY = 8;
+        this.alive = true;
+        this.lifespan = 6000; // 6 seconds
+        this.birthTime = Date.now();
+    }
+    
+    update(gravity) {
+        this.velocityY -= gravity;
+        this.mesh.position.y += this.velocityY;
+        
+        // Fade out
+        if (Date.now() - this.birthTime > this.lifespan) {
+            this.alive = false;
         }
     }
     
@@ -285,10 +377,10 @@ class Enemy {
         const dx = Math.abs(this.mesh.position.x - other.mesh.position.x);
         const dy = Math.abs(this.mesh.position.y - other.mesh.position.y);
         
-        if (other.width) {
-            return dx < (other.width / 2 + 15) && dy < 30;
-        }
-        return dx < 30 && dy < 40;
+        const minDist = (this.width + other.width) / 2;
+        const minDistY = (this.height + other.height) / 2;
+        
+        return dx < minDist && dy < minDistY;
     }
 }
 
