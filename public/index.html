@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bubble Bobble - PlayCanvas</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 18px;
+            z-index: 10;
+            font-weight: bold;
+        }
+        .ui-line {
+            margin: 8px 0;
+        }
+        #status {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="ui">
+        <div class="ui-line">Score: <span id="score">0</span></div>
+        <div class="ui-line">Lives: <span id="lives">3</span></div>
+        <div class="ui-line">Level: <span id="level">1</span></div>
+    </div>
+    <div id="status">
+        Arrow Keys / WASD to move and jump
+    </div>
+
+    <script>
+        const { Application, Quat, Vec3 } = window.pc;
+
+        const canvas = document.getElementById('canvas');
+        const app = new pc.Application(canvas, {
+            mouse: new pc.Mouse(canvas),
+            touch: new pc.TouchDevice(canvas),
+            keyboard: new pc.Keyboard(window)
+        });
+        app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+        app.setCanvasResolution(pc.RESOLUTION_AUTO);
+
+        // Game state
+        const gameState = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            gameActive: true
+        };
+
+        // Create camera
+        const camera = new pc.Entity();
+        camera.addComponent('camera', {
+            clearColor: new pc.Color(0, 0.1, 0.2)
+        });
+        camera.setLocalPosition(0, 0, 15);
+        app.root.addChild(camera);
+
+        // Create lights
+        const light = new pc.Entity();
+        light.addComponent('light', {
+            type: 'directional',
+            color: new pc.Color(1, 1, 1),
+            intensity: 1,
+            castShadows: false
+        });
+        light.setLocalEulerAngles(-45, 0, 0);
+        app.root.addChild(light);
+
+        // Player entity
+        const player = new pc.Entity();
+        player.addComponent('model', {
+            type: 'box'
+        });
+        player.model.model.meshInstances[0].material.color = new pc.Color(1, 0.4, 0);
+        player.setLocalScale(0.3, 0.4, 0.1);
+        player.setLocalPosition(0, -2, 0);
+        
+        player.playerData = {
+            velocityX: 0,
+            velocityY: 0,
+            onGround: false,
+            gravity: 15,
+            initialPos: new pc.Vec3(0, -2, 0)
+        };
+        
+        app.root.addChild(player);
+
+        // Create platforms
+        const platforms = [];
+        const platformConfigs = [
+            { x: 0, y: -2.5, w: 5, h: 0.3 },
+            { x: -2, y: 0, w: 3.5, h: 0.25 },
+            { x: 2, y: 0, w: 3.5, h: 0.25 },
+            { x: -2, y: 2, w: 3.5, h: 0.25 },
+            { x: 2, y: 2, w: 3.5, h: 0.25 },
+            { x: 0, y: 4, w: 5, h: 0.3 },
+        ];
+
+        platformConfigs.forEach(cfg => {
+            const platform = new pc.Entity();
+            platform.addComponent('model', { type: 'box' });
+            platform.model.model.meshInstances[0].material.color = new pc.Color(0, 1, 0);
+            platform.setLocalScale(cfg.w, cfg.h, 0.1);
+            platform.setLocalPosition(cfg.x, cfg.y, 0);
+            platform.bounds = { w: cfg.w / 2, h: cfg.h / 2 };
+            platforms.push(platform);
+            app.root.addChild(platform);
+        });
+
+        // Create enemies
+        const enemies = [];
+        function spawnEnemy(x, y) {
+            const enemy = new pc.Entity();
+            enemy.addComponent('model', { type: 'box' });
+            enemy.model.model.meshInstances[0].material.color = new pc.Color(1, 0, 0.4);
+            enemy.setLocalScale(0.26, 0.34, 0.1);
+            enemy.setLocalPosition(x, y, 0);
+            
+            enemy.enemyData = {
+                velocityX: (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random()),
+                velocityY: 0,
+                onGround: false
+            };
+            
+            enemies.push(enemy);
+            app.root.addChild(enemy);
+        }
+        
+        spawnEnemy(-3, 3);
+        spawnEnemy(3, 3);
+
+        // Helper functions
+        function aabbCollide(pos1, size1, pos2, size2) {
+            const dx = Math.abs(pos1.x - pos2.x);
+            const dy = Math.abs(pos1.y - pos2.y);
+            const overlapX = dx < (size1.x / 2 + size2.x / 2);
+            const overlapY = dy < (size1.y / 2 + size2.y / 2);
+            return overlapX && overlapY;
+        }
+
+        function updateUI() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('lives').textContent = gameState.lives;
+            document.getElementById('level').textContent = gameState.level;
+        }
+
+        // Game loop
+        app.on('update', function(dt) {
+            if (!gameState.gameActive) return;
+
+            const input = app.keyboard;
+            const gravity = player.playerData.gravity;
+
+            // Player input
+            if (input.isPressed(pc.KEY_LEFT) || input.isPressed(pc.KEY_A)) {
+                player.playerData.velocityX = -4;
+            } else if (input.isPressed(pc.KEY_RIGHT) || input.isPressed(pc.KEY_D)) {
+                player.playerData.velocityX = 4;
+            } else {
+                player.playerData.velocityX *= 0.92;
+            }
+
+            if ((input.isPressed(pc.KEY_UP) || input.isPressed(pc.KEY_W) || input.isPressed(pc.KEY_SPACE)) 
+                && player.playerData.onGround) {
+                player.playerData.velocityY = 8;
+                player.playerData.onGround = false;
+            }
+
+            // Update player physics
+            player.playerData.velocityY -= gravity * dt;
+            player.translate(player.playerData.velocityX * dt, player.playerData.velocityY * dt, 0);
+
+            // Platform collision
+            player.playerData.onGround = false;
+            platforms.forEach(platform => {
+                const pos1 = player.getLocalPosition();
+                const pos2 = platform.getLocalPosition();
+                const size1 = new pc.Vec3(0.3, 0.4, 0.1);
+                const size2 = new pc.Vec3(platform.getLocalScale().x, platform.getLocalScale().y, 0.1);
+                
+                if (aabbCollide(pos1, size1, pos2, size2) && player.playerData.velocityY <= 0) {
+                    player.setLocalPosition(pos1.x, pos2.y + size2.y / 2 + size1.y / 2, 0);
+                    player.playerData.velocityY = 0;
+                    player.playerData.onGround = true;
+                }
+            });
+
+            // Wrap player
+            const pos = player.getLocalPosition();
+            if (pos.x < -8) player.setLocalPosition(8, pos.y, 0);
+            if (pos.x > 8) player.setLocalPosition(-8, pos.y, 0);
+            if (pos.y < -6) {
+                gameState.lives--;
+                player.setLocalPosition(0, -2, 0);
+                if (gameState.lives <= 0) gameState.gameActive = false;
+            }
+
+            // Update enemies
+            enemies.forEach(enemy => {
+                enemy.enemyData.velocityY -= gravity * dt;
+                enemy.translate(enemy.enemyData.velocityX * dt, enemy.enemyData.velocityY * dt, 0);
+
+                const epos = enemy.getLocalPosition();
+                enemy.enemyData.onGround = false;
+                
+                platforms.forEach(platform => {
+                    const pos1 = epos;
+                    const pos2 = platform.getLocalPosition();
+                    const size1 = new pc.Vec3(0.26, 0.34, 0.1);
+                    const size2 = new pc.Vec3(platform.getLocalScale().x, platform.getLocalScale().y, 0.1);
+                    
+                    if (aabbCollide(pos1, size1, pos2, size2) && enemy.enemyData.velocityY <= 0) {
+                        enemy.setLocalPosition(pos1.x, pos2.y + size2.y / 2 + size1.y / 2, 0);
+                        enemy.enemyData.velocityY = 0;
+                        enemy.enemyData.onGround = true;
+                    }
+                });
+
+                if (Math.abs(epos.x) > 7.5) enemy.enemyData.velocityX *= -1;
+                if (enemy.enemyData.onGround && Math.random() < 0.02) {
+                    enemy.enemyData.velocityY = 6;
+                }
+
+                // Enemy-player collision
+                if (aabbCollide(player.getLocalPosition(), new pc.Vec3(0.3, 0.4, 0.1), epos, new pc.Vec3(0.26, 0.34, 0.1))) {
+                    gameState.lives--;
+                    if (gameState.lives <= 0) gameState.gameActive = false;
+                    player.setLocalPosition(0, -2, 0);
+                }
+            });
+
+            updateUI();
+        });
+
+        app.start();
+    </script>
+
+    <script async src="https://unpkg.com/playcanvas@latest/build/playcanvas.js"></script>
+</body>
+</html>

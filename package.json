@@ -1,19 +1,24 @@
 {
-  "name": "bubble-bobble-webgl",
-  "version": "0.1.0",
-  "description": "Bubble Bobble platform game in WebGL",
-  "main": "dist/game.js",
+  "name": "bubble_bobble_webgl",
+  "version": "1.0.0",
+  "description": "A WebGL implementation of the classic Bubble Bobble platform game.",
+  "main": "index.js",
   "scripts": {
-    "dev": "ts-node server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erlandsen-tech/bubble_bobble_webgl.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/erlandsen-tech/bubble_bobble_webgl/issues"
+  },
+  "homepage": "https://github.com/erlandsen-tech/bubble_bobble_webgl#readme",
   "dependencies": {
-    "three": "^r128"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "ts-node": "^10.0.0",
-    "@types/node": "^20.0.0"
+    "playcanvas": "^2.18.0"
   }
 }
