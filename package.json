@@ -1,0 +1,19 @@
+{
+  "name": "bubble-bobble-webgl",
+  "version": "0.1.0",
+  "description": "Bubble Bobble platform game in WebGL",
+  "main": "dist/game.js",
+  "scripts": {
+    "dev": "ts-node server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "three": "^r128"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
