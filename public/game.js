@@ -41,7 +41,7 @@ class Game {
     
     init() {
         // Create player
-        this.player = new Player(0, -window.innerHeight / 4);
+        this.player = new Player(0, -80);
         this.scene.add(this.player.mesh);
         
         // Create platforms
@@ -57,12 +57,12 @@ class Game {
         this.platforms = [];
         
         const platformData = [
-            { x: 0, y: 0, width: 500, height: 30 },
-            { x: -200, y: 150, width: 350, height: 25 },
-            { x: 200, y: 150, width: 350, height: 25 },
-            { x: -200, y: 300, width: 350, height: 25 },
-            { x: 200, y: 300, width: 350, height: 25 },
-            { x: 0, y: 450, width: 500, height: 30 },
+            { x: 0, y: -100, width: 500, height: 30 },
+            { x: -200, y: 50, width: 350, height: 25 },
+            { x: 200, y: 50, width: 350, height: 25 },
+            { x: -200, y: 200, width: 350, height: 25 },
+            { x: 200, y: 200, width: 350, height: 25 },
+            { x: 0, y: 350, width: 500, height: 30 },
         ];
         
         platformData.forEach(data => {
